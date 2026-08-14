@@ -48,11 +48,11 @@ jobs:
         with:
           version: "v0.10.0"
 
-      - name: Setup Java 17
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Build JDBC plugin package (release=17 + bundled Inceptor driver)
         shell: bash
