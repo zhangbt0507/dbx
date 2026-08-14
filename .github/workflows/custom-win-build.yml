@@ -58,6 +58,12 @@ jobs:
         shell: bash
         run: choco install zip -y --no-progress
 
+      - name: Install Strawberry Perl (OpenSSL source build needs full Perl modules)
+        shell: bash
+        run: |
+          choco install strawberryperl -y --no-progress
+          echo "C:\Strawberry\perl\bin;C:\Strawberry\c\bin" >> "$GITHUB_PATH"
+
       - name: Build JDBC plugin package (release=17 + bundled Inceptor driver)
         shell: bash
         run: |
