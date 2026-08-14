@@ -1,0 +1,103 @@
+name: Custom Windows Build (JDK 17 + ArgoDB)
+
+# Internal distribution build: DBX for Windows 11 with a bundled Temurin JRE 17
+# (agents + JDBC plugin run on Java 17 bytecode) and the StarLake Inceptor
+# driver bundled inside the JDBC plugin package.
+#
+# Usage: push a `v*` tag or run this workflow manually. The produced NSIS
+# installer is uploaded as a release asset on the tag, or as a workflow
+# artifact for manual runs.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: custom-win-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    env:
+      CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+        with:
+          version: "v0.10.0"
+
+      - name: Build JDBC plugin package (release=17 + bundled Inceptor driver)
+        shell: bash
+        run: |
+          sh plugins/jdbc/package.sh
+          ls -la plugins/jdbc/dist/
+
+      # Bundle JRE 17 into the installer: <resources>/jre/jre-17-windows-x64.tar.gz
+      # (tar.gz keeps the Windows runner dependency-free; extraction is handled
+      # natively by DBX at install time).
+      - name: Download and bundle Temurin JRE 17
+        shell: pwsh
+        run: |
+          $jreZip = Join-Path $env:RUNNER_TEMP "temurin17-jre.zip"
+          Invoke-WebRequest -Uri "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse" -OutFile $jreZip
+          Expand-Archive -Path $jreZip -DestinationPath (Join-Path $env:RUNNER_TEMP "jre17") -Force
+          $root = Get-ChildItem (Join-Path $env:RUNNER_TEMP "jre17") -Directory | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path "src-tauri/resources/jre" | Out-Null
+          tar -czf "src-tauri/resources/jre/jre-17-windows-x64.tar.gz" -C $root.FullName "."
+          Get-ChildItem "src-tauri/resources/jre"
+
+      - name: Build frontend + bundle NSIS installer
+        shell: bash
+        # Keep the build identical to the official release.yml (msvc target,
+        # no custom-protocol feature): local GNU (mingw) cross-builds fail on
+        # Windows with ERR_CONNECTION_REFUSED because the tauri.localhost
+        # resource interception does not work under mingw.
+        # offlineInstaller embeds the WebView2 setup so air-gapped machines
+        # always get a runtime new enough for the tauri.localhost mapping.
+        run: |
+          pnpm tauri bundle --bundles nsis --target x86_64-pc-windows-msvc --config src-tauri/tauri.webview2-offline.conf.json
+
+      - name: Locate installer
+        shell: bash
+        run: |
+          ls -la src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/
+
+      - name: Upload installer as release asset (tag runs only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          installer=$(ls src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe | head -1)
+          echo "Uploading $installer"
+          gh release upload "${GITHUB_REF_NAME}" "$installer" --repo "${GITHUB_REPOSITORY}" --clobber
+
+      - name: Upload installer as artifact (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbx-custom-win-x64-setup
+          path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error

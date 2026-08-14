@@ -5,3 +5,7 @@ dependencies {
     testImplementation 'com.h2database:h2:2.3.232'
     testRuntimeOnly 'org.slf4j:slf4j-nop:2.0.17'
 }
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+}

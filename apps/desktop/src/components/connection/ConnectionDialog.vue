@@ -1133,10 +1133,12 @@ const driverProfiles: Record<
   trino: { type: "trino", port: 8080, user: "", label: "Trino", icon: "trino" },
   prestosql: { type: "prestosql", port: 8080, user: "", label: "PrestoSQL", icon: "presto" },
   hive: { type: "hive", port: 10000, user: "", label: "Apache Hive", icon: "hive" },
+
   spark: { type: "spark", port: 10015, user: "", label: "Apache Spark", icon: "spark" },
   db2: { type: "db2", port: 50000, user: "db2inst1", label: "IBM DB2", icon: "db2" },
   informix: { type: "informix", port: 9088, user: "informix", label: "Informix", icon: "informix" },
   dremio: { type: "jdbc", port: 31010, user: "", label: "Dremio", icon: "dremio" },
+  argodb: { type: "jdbc", port: 10000, user: "", label: "StarLake ArgoDB", icon: "hive" },
   jdbcx: { type: "jdbc", port: 0, user: "", label: "JDBCX", icon: "jdbcx" },
   neo4j: { type: "neo4j", port: 7687, user: "neo4j", label: "Neo4j", icon: "neo4j" },
   cassandra: { type: "cassandra", port: 9042, user: "cassandra", label: "Cassandra", icon: "cassandra" },
@@ -2313,6 +2315,9 @@ function applyProfile(val: string, preserveConnectionFields = false) {
       if (val === "dremio") {
         resetDremioConnectionUrls();
         applyDremioConnectionMode("legacy");
+      } else if (val === "argodb") {
+        form.value.connection_string = "jdbc:argodb://localhost:10000/default";
+        form.value.jdbc_driver_class = "org.apache.hive.jdbc.HiveDriver";
       } else if (jdbcProductProfileDefinition(val)) {
         const jdbcProductProfile = jdbcProductProfileDefinition(val)!;
         resetJdbcProductConnectionFields(jdbcProductProfile);
@@ -2770,6 +2775,7 @@ const iconTypeMap: Record<string, string> = {
   db2: "db2",
   informix: "informix",
   dremio: "dremio",
+  argodb: "argodb",
   jdbcx: "jdbcx",
   iris: "iris",
   neo4j: "neo4j",
@@ -2875,6 +2881,7 @@ const dbOptions: DbOption[] = [
   { value: "dolt", label: "Dolt" },
   { value: "custom_postgres", label: "Custom (PostgreSQL)" },
   { value: "dremio", label: "Dremio" },
+  { value: "argodb", label: "StarLake ArgoDB" },
   ...jdbcProductPickerOptions(),
 ];
 

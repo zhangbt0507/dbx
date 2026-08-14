@@ -1451,7 +1451,7 @@ pub fn run() {
                 default_agent_dir,
             );
 
-            let state = if let Some(agent_dir) = agent_dir {
+            let mut state = if let Some(agent_dir) = agent_dir {
                 AppState::new_with_plugin_and_agent_dir_and_app_version(
                     storage,
                     plugin_dir,
@@ -1461,6 +1461,11 @@ pub fn run() {
             } else {
                 AppState::new_with_plugin_dir_and_app_version(storage, plugin_dir, env!("CARGO_PKG_VERSION"))
             };
+            // Bundled JRE 17 archives ship under `<app resources>/jre/` in
+            // customized builds (see release.yml `bundle-jre17`). No-op on
+            // stock builds where the directory does not exist.
+            let bundled_jre_dir = app.path().resource_dir().ok().map(|res| res.join("jre")).filter(|dir| dir.is_dir());
+            state.set_bundled_jre_dir(bundled_jre_dir);
             state.set_duckdb_worker_process_isolation_enabled(desktop_settings.duckdb_worker_process_isolation);
             state.set_duckdb_worker_max_processes(desktop_settings.duckdb_worker_max_processes);
             let state = Arc::new(state);

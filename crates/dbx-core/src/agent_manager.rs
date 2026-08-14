@@ -12,7 +12,8 @@ use crate::db::agent_driver::{
 };
 use crate::models::connection::DatabaseType;
 
-pub const DEFAULT_JRE_KEY: &str = "21";
+pub const DEFAULT_JRE_KEY: &str = "17";
+pub const BUNDLED_JRE_VERSION: &str = "17.0.20";
 pub const DOWNLOAD_CACHE_DIR_NAME: &str = "download-cache";
 pub const DOWNLOAD_CACHE_MAX_AGE_DAYS: u64 = 7;
 
@@ -244,7 +245,7 @@ mod tests {
             Err(err) => err,
         };
 
-        assert_eq!(err, "JRE 21 runtime is not installed. Please install it from the Driver Manager.");
+        assert_eq!(err, "JRE 17 runtime is not installed. Please install it from the Driver Manager.");
     }
 
     #[tokio::test]
@@ -495,6 +496,11 @@ pub struct DriverStoreUsage {
 pub struct AgentManager {
     base_dir: PathBuf,
     app_version: String,
+    /// Directory that ships bundled JRE archives next to the app
+    /// (e.g. `<app resources>/jre/jre-17-windows-x64.tar.zst`), populated at
+    /// runtime from the host app (Tauri resource dir). `None` when the
+    /// platform/Docker build does not bundle a JRE.
+    pub(crate) bundled_jre_dir: Option<PathBuf>,
     pub(crate) daemons: Mutex<std::collections::HashMap<String, AgentDriverClient>>,
     pub(crate) connection_runtimes: Mutex<
         std::collections::HashMap<String, std::sync::Arc<tokio::sync::OnceCell<std::sync::Arc<AgentRuntimeClient>>>>,
@@ -534,6 +540,7 @@ impl AgentManager {
         let mgr = Self {
             base_dir,
             app_version: app_version.into(),
+            bundled_jre_dir: None,
             daemons: Mutex::new(std::collections::HashMap::new()),
             connection_runtimes: Mutex::new(std::collections::HashMap::new()),
             state_lock: StdMutex::new(()),
@@ -631,6 +638,14 @@ impl AgentManager {
 
     pub fn agent_app_version(&self) -> &str {
         &self.app_version
+    }
+
+    pub fn set_bundled_jre_dir(&mut self, dir: Option<PathBuf>) {
+        self.bundled_jre_dir = dir;
+    }
+
+    pub fn bundled_jre_dir(&self) -> Option<&Path> {
+        self.bundled_jre_dir.as_deref()
     }
 
     pub fn jre_dir(&self, jre_key: &str) -> PathBuf {

@@ -21,6 +21,10 @@ plugins/jdbc/dependency-reduced-pom.xml
 plugins/jdbc/lib/*.jar
 plugins/jdbc/.gradle/
 plugins/jdbc/build/
+plugins/jdbc/bin/
+plugins/jdbc/.classpath
+plugins/jdbc/.project
+plugins/jdbc/.settings/
 plugins/jdbc/dist/
 docs/.next/
 docs/out/

@@ -10,7 +10,9 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.io.Reader;
+import java.io.StringWriter;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.math.BigDecimal;
@@ -247,8 +249,13 @@ public final class DbxJdbcPlugin {
             response.set("result", handle(method, params, connection));
         } catch (Throwable error) {
             // The plugin protocol boundary must report linkage errors from vendor drivers instead of exiting silently.
+            error.printStackTrace();
             ObjectNode errorNode = MAPPER.createObjectNode();
-            errorNode.put("message", throwableMessage(error));
+            String detail = throwableMessage(error);
+            StringWriter traceWriter = new StringWriter();
+            error.printStackTrace(new PrintWriter(traceWriter));
+            detail += "\n" + traceWriter;
+            errorNode.put("message", detail);
             response.set("error", errorNode);
         }
         return response;
@@ -595,10 +602,10 @@ public final class DbxJdbcPlugin {
         if (isPrestoOrTrinoConnection(connection)) {
             return;
         }
-        String value = Integer.toString(connectTimeoutSecs);
+        String value = connectTimeoutPropertyValue(connection, connectTimeoutSecs);
         properties.putIfAbsent("loginTimeout", value);
         if (!jdbcUrlHasParameter(jdbcUrl(connection), "connectTimeout")) {
-            properties.putIfAbsent("connectTimeout", connectTimeoutPropertyValue(connection, connectTimeoutSecs));
+            properties.putIfAbsent("connectTimeout", value);
         }
     }
 
@@ -615,7 +622,8 @@ public final class DbxJdbcPlugin {
             urlMatchesPrefix(url, "jdbc:mysql:") ||
             urlMatchesPrefix(url, "jdbc:mariadb:") ||
             urlMatchesPrefix(url, "jdbc:starrocks:") ||
-            urlMatchesPrefix(url, "jdbc:doris:")
+            urlMatchesPrefix(url, "jdbc:doris:") ||
+            urlMatchesPrefix(url, "jdbc:hive2:")
         ) {
             return true;
         }

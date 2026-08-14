@@ -2041,6 +2041,35 @@
         "userAdmin": false,
         "driverManagement": true
       }
+    },
+    {
+      "dbType": "argodb",
+      "label": "StarLake ArgoDB",
+      "runtimeMode": "external",
+      "mcpMode": "bridge",
+      "singleConnectionPool": false,
+      "metadataConnectionScoped": false,
+      "skipTcpProbe": true,
+      "defaultPort": 10000,
+      "supportLevel": "operate",
+      "capabilities": {
+        "queryExecution": true,
+        "metadataBrowse": true,
+        "objectBrowser": true,
+        "objectSource": false,
+        "schemaSearch": true,
+        "diagram": false,
+        "tableDataEdit": true,
+        "tableStructureEdit": false,
+        "tableImport": false,
+        "dataTransfer": true,
+        "sqlFileExecution": true,
+        "databaseCreate": false,
+        "fieldLineage": false,
+        "sqlExplain": false,
+        "userAdmin": false,
+        "driverManagement": true
+      }
     }
   ]
 }

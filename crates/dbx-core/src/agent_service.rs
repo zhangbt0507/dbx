@@ -9,7 +9,8 @@ use sha2::{Digest, Sha256};
 
 use crate::agent_catalog;
 use crate::agent_manager::{
-    AgentDriverInfo, AgentManager, AgentRegistry, ArtifactFormat, InstalledDriver, JavaRuntimeMode, DEFAULT_JRE_KEY,
+    AgentDriverInfo, AgentManager, AgentRegistry, ArtifactFormat, InstalledDriver, JavaRuntimeMode,
+    BUNDLED_JRE_VERSION, DEFAULT_JRE_KEY,
 };
 use crate::DownloadSource;
 
@@ -53,6 +54,21 @@ fn remove_jre_dir_with_retry(path: &Path) -> std::io::Result<()> {
         }
     }
     Err(last_err.unwrap_or_else(|| std::io::Error::other("remove_dir_all failed without an error")))
+}
+
+/// Rewrites an installed agent JAR so its classes load on the bundled JDK 17
+/// runtime (distributed agent JARs are Java 21 bytecode). No-op for native
+/// agents and for JARs that are already JDK 17 compatible.
+fn ensure_driver_jar_jdk17(am: &AgentManager, db_type: &str) -> Result<(), String> {
+    let jar_path = am.driver_jar_path(db_type);
+    if !jar_path.exists() {
+        return Ok(());
+    }
+    let changed = crate::agent_jre_compat::downgrade_jar_to_jdk17(&jar_path)?;
+    if changed > 0 {
+        log::info!("[agent] downgraded {changed} classes in {} to JDK 17 bytecode", jar_path.display());
+    }
+    Ok(())
 }
 
 /// Render a friendly error message when the old JRE directory cannot be
@@ -334,7 +350,9 @@ fn install_local_agent_file(am: &AgentManager, db_type: &str, source: &Path) -> 
         std::fs::remove_file(&staging_path).ok();
         return Err(format!("Local agent jar is invalid or corrupt: {}", source.display()));
     }
-    replace_imported_agent_file(&staging_path, &jar_path)
+    replace_imported_agent_file(&staging_path, &jar_path)?;
+    ensure_driver_jar_jdk17(am, db_type)?;
+    Ok(())
 }
 
 fn record_local_agent_install(state: &mut crate::agent_manager::AgentState, db_type: &str, jre_key: &str) {
@@ -765,6 +783,21 @@ async fn ensure_jre_from_registry(
         return Ok(());
     }
 
+    // Bundled JRE ships next to the app (custom builds, air-gapped installs).
+    // Prefer it over a registry download when present.
+    if let Some((bundled_archive, bundled_format)) = bundled_jre_archive_path(am, jre_key) {
+        progress(AgentProgressEvent::transfer("jre-bundled", 0, 0).with_batch(Some(db_type), current, total_drivers));
+        let jre_dir = am.jre_dir(jre_key);
+        stop_daemons_using_jre(am, jre_key).await;
+        let stash = replace_old_jre_dir(&jre_dir)?;
+        persist_pending_jre_cleanup(am, stash.as_ref()).await?;
+        extract_jre_archive(&bundled_archive, &jre_dir, bundled_format)?;
+        am.mutate_state(|state| {
+            state.jre_versions.insert(jre_key.to_string(), BUNDLED_JRE_VERSION.to_string());
+        })?;
+        return Ok(());
+    }
+
     let jre_info = registry.resolve_jre(jre_key).ok_or_else(|| format!("No JRE definition for version: {jre_key}"))?;
     let platform = AgentManager::current_platform();
     let platform_jre = jre_info
@@ -915,7 +948,10 @@ async fn install_agent_driver_from_registry(
         }
         return Err(format!("Unknown driver type: {db_type}"));
     };
-    let jre_key = &driver.jre;
+    // Agents are built (and bytecode-downgraded) for Java 17. Pin the runtime
+    // key so a registry that still advertises jre "21" cannot spawn agents on
+    // a JRE that would fail to load 17-bytecode jars with UnsupportedClassVersionError.
+    let jre_key = DEFAULT_JRE_KEY;
     let native_artifact = driver.native.get(AgentManager::current_platform());
     let jar_artifact = driver.jar.as_ref();
     let requires_java_runtime = native_artifact.is_none();
@@ -977,12 +1013,16 @@ async fn install_agent_driver_from_registry(
             return Err(format!("Downloaded driver jar is invalid or corrupt: {}", target_path.display()));
         }
         std::fs::remove_file(am.driver_native_path(db_type)).ok();
+        ensure_driver_jar_jdk17(am, db_type)?;
     }
 
     am.mutate_state(|state| {
         if requires_java_runtime {
             if let Some(jre_info) = registry.resolve_jre(jre_key) {
-                state.jre_versions.insert(jre_key.clone(), jre_info.version.clone());
+                state.jre_versions.insert(jre_key.to_string(), jre_info.version.clone());
+            } else if jre_key == DEFAULT_JRE_KEY {
+                // Bundled-JRE installs are not described by the registry.
+                state.jre_versions.insert(jre_key.to_string(), BUNDLED_JRE_VERSION.to_string());
             }
         }
         state.installed_drivers.insert(
@@ -990,7 +1030,7 @@ async fn install_agent_driver_from_registry(
             InstalledDriver {
                 version: driver.version.clone(),
                 installed_at: chrono::Utc::now().to_rfc3339(),
-                jre: jre_key.clone(),
+                jre: jre_key.to_string(),
             },
         );
     })?;
@@ -1786,6 +1826,7 @@ async fn import_tar_zstd_driver_package(
     match info.kind {
         DriverArtifactKind::Jar => {
             std::fs::remove_file(am.driver_native_path(&info.db_type)).ok();
+            ensure_driver_jar_jdk17(am, &info.db_type)?;
         }
         DriverArtifactKind::Native => {
             std::fs::remove_file(am.driver_jar_path(&info.db_type)).ok();
@@ -2037,8 +2078,7 @@ pub async fn import_offline_zip(
         }
 
         let version = registry.drivers.get(db_type).map(|d| d.version.clone()).unwrap_or_else(|| "local".to_string());
-        let jre_key =
-            registry.drivers.get(db_type).map(|d| d.jre.clone()).unwrap_or_else(|| DEFAULT_JRE_KEY.to_string());
+        let jre_key = DEFAULT_JRE_KEY.to_string();
 
         local_state.installed_drivers.insert(
             db_type.clone(),
@@ -2220,6 +2260,24 @@ fn jre_archive_download_path(am: &AgentManager, jre_key: &str, format: Option<Ar
     am.base_dir().join(format!("jre-{jre_key}-download{}", jre_archive_suffix(format)))
 }
 
+/// Locate a bundled JRE archive shipped next to the app, e.g.
+/// `<resources>/jre/jre-17-windows-x64.tar.zst` (or `.tar.gz`). Naming must
+/// match what CI bundles (see `.github/workflows/custom-win-build.yml`).
+fn bundled_jre_archive_path(am: &AgentManager, jre_key: &str) -> Option<(std::path::PathBuf, Option<ArtifactFormat>)> {
+    let dir = am.bundled_jre_dir()?;
+    let platform = AgentManager::current_platform();
+    let base = format!("jre-{jre_key}-{platform}");
+    let zstd = dir.join(format!("{base}.tar.zst"));
+    if zstd.is_file() {
+        return Some((zstd, Some(ArtifactFormat::TarZstd)));
+    }
+    let gz = dir.join(format!("{base}.tar.gz"));
+    if gz.is_file() {
+        return Some((gz, None));
+    }
+    None
+}
+
 fn extract_jre_archive(archive: &Path, dest: &Path, format: Option<ArtifactFormat>) -> Result<(), String> {
     match format {
         Some(ArtifactFormat::TarZstd) => {
@@ -2330,6 +2388,33 @@ mod jre_archive_tests {
 
         let error = extract_tar_gz(&archive_path, &temp.path().join("managed-jre")).unwrap_err();
         assert!(error.contains("single top-level directory"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn bundled_jre_archive_resolves_gz_and_prefers_zstd() {
+        let base = tempfile::tempdir().unwrap();
+        let bundled_dir = tempfile::tempdir().unwrap();
+        let mut am = crate::agent_manager::AgentManager::new_with_base_dir(base.path().to_path_buf());
+        am.set_bundled_jre_dir(Some(bundled_dir.path().to_path_buf()));
+        let platform = crate::agent_manager::AgentManager::current_platform();
+
+        assert_eq!(bundled_jre_archive_path(&am, "17"), None, "missing archives must not resolve");
+
+        let gz = bundled_dir.path().join(format!("jre-17-{platform}.tar.gz"));
+        std::fs::write(&gz, b"gz").unwrap();
+        assert_eq!(bundled_jre_archive_path(&am, "17"), Some((gz.clone(), None)));
+
+        let zst = bundled_dir.path().join(format!("jre-17-{platform}.tar.zst"));
+        std::fs::write(&zst, b"zst").unwrap();
+        assert_eq!(
+            bundled_jre_archive_path(&am, "17"),
+            Some((zst, Some(ArtifactFormat::TarZstd))),
+            "zstd must win over gz"
+        );
+
+        let other_key = bundled_dir.path().join(format!("jre-21-{platform}.tar.gz"));
+        std::fs::write(&other_key, b"gz").unwrap();
+        assert_eq!(bundled_jre_archive_path(&am, "21"), Some((other_key, None)));
     }
 }
 

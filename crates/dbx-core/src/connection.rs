@@ -1058,6 +1058,13 @@ impl AppState {
         self.duckdb_worker_process_isolation.store(enabled, Ordering::Relaxed);
     }
 
+    /// Point the agent manager at a directory containing bundled JRE archives
+    /// shipped next to the app (e.g. `jre-17-windows-x64.tar.zst`). Pass
+    /// `None` (the default) on platforms without a bundled JRE.
+    pub fn set_bundled_jre_dir(&mut self, dir: Option<PathBuf>) {
+        self.agent_manager.set_bundled_jre_dir(dir);
+    }
+
     pub fn set_duckdb_worker_max_processes(&self, max_processes: usize) {
         self.duckdb_worker_max_processes.store(normalize_duckdb_worker_max_processes(max_processes), Ordering::Relaxed);
     }
