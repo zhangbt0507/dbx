@@ -111,7 +111,10 @@ jobs:
         # which produces the frontend dist needed for packaging.
         run: |
           export PATH="/c/Strawberry/perl/bin:/c/Strawberry/c/bin:$PATH"
-          pnpm tauri build --bundles nsis --target x86_64-pc-windows-msvc --config src-tauri/tauri.webview2-offline.conf.json
+          # `|| true`: without a signing private key tauri exits 1 after the
+          # installer is produced (updater artifacts are not used here).
+          pnpm tauri build --bundles nsis --target x86_64-pc-windows-msvc --config src-tauri/tauri.webview2-offline.conf.json || true
+          ls -la target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
 
       - name: Locate installer
         shell: bash
