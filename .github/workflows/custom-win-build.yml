@@ -62,8 +62,14 @@ jobs:
         shell: bash
         run: |
           choco install strawberryperl -y --no-progress || true
-          echo "C:\Strawberry\perl\bin" >> "$GITHUB_PATH"
-          echo "C:\Strawberry\c\bin" >> "$GITHUB_PATH"
+          for d in "/c/Strawberry" "/c/tools/strawberryperl" "/c/Perl64" "/c/Perl"; do
+            if [ -f "$d/perl/bin/perl.exe" ]; then
+              echo "Found Strawberry Perl at $d"
+              echo "$d/perl/bin" >> "$GITHUB_PATH"
+              echo "$d/c/bin" >> "$GITHUB_PATH"
+              break
+            fi
+          done
 
       - name: Verify Perl
         shell: bash
