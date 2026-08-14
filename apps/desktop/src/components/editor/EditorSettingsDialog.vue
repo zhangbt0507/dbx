@@ -275,6 +275,11 @@ const editCustomThemes = ref<CustomTheme[]>([...settingsStore.editorSettings.cus
 const editActiveCustomThemeId = ref(settingsStore.editorSettings.activeCustomThemeId);
 const showThemeCustomizer = ref(false);
 const editExecuteMode = ref(settingsStore.editorSettings.executeMode);
+const editShortcuts = ref(normalizeShortcutSettings(settingsStore.editorSettings.shortcuts));
+function translateWithExecuteShortcut(key: string): string {
+  return t(key, { shortcut: formatShortcutDisplay(editShortcuts.value.executeSql) });
+}
+const executeModeLabel = computed(() => translateWithExecuteShortcut("settings.executeMode"));
 const editExecuteAllOnBlankLine = ref(settingsStore.editorSettings.executeAllOnBlankLine);
 const editShowExecutionTargetPicker = ref(settingsStore.editorSettings.showExecutionTargetPicker);
 const editShowStatementRunButtons = ref(settingsStore.editorSettings.showStatementRunButtons);
@@ -379,7 +384,6 @@ function setSqlVariableSyntaxToggle(key: keyof SqlVariableSyntaxToggles, value: 
 const tableColumnTemplateSectionRef = ref<HTMLElement | null>(null);
 const draggedTableColumnTemplateRowId = ref<string | null>(null);
 let tableColumnTemplatePointerDragCleanup: (() => void) | null = null;
-const editShortcuts = ref(normalizeShortcutSettings(settingsStore.editorSettings.shortcuts));
 const editSqlFormatter = ref<SqlFormatterSettings>(normalizeSqlFormatterSettings(settingsStore.editorSettings.sqlFormatter));
 const sqlFormatterConfigValid = ref(true);
 const editingShortcutId = ref<ShortcutActionId | null>(null);
@@ -1474,7 +1478,7 @@ const settingsSearchEntries = computed(() =>
       isWeb,
       visibleCategories: new Set(settingsCategoryNav.value.map((category) => category.value)),
     },
-    t,
+    translateWithExecuteShortcut,
     settingsSearchCategoryLabels.value,
   ),
 );
@@ -3681,10 +3685,10 @@ onUnmounted(() => {
 
               <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div class="space-y-2">
-                  <Label>{{ t("settings.executeMode") }}</Label>
+                  <Label>{{ executeModeLabel }}</Label>
                   <Select :model-value="editExecuteMode" @update:model-value="onExecuteModeChange">
                     <SelectTrigger>
-                      <SelectValue :placeholder="t('settings.executeMode')" />
+                      <SelectValue :placeholder="executeModeLabel" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">{{ t("settings.executeModeAll") }}</SelectItem>
