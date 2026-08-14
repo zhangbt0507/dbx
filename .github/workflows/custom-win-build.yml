@@ -74,9 +74,8 @@ jobs:
 
       - name: Verify Perl
         shell: bash
-        env:
-          PATH: "C:\\Strawberry\\perl\\bin;C:\\Strawberry\\c\\bin;${PATH}"
         run: |
+          export PATH="/c/Strawberry/perl/bin:/c/Strawberry/c/bin:$PATH"
           perl -v | head -2
           perl -MLocale::Maketext::Simple -e 'print "Locale::Maketext::Simple OK\n"'
 
@@ -102,10 +101,6 @@ jobs:
 
       - name: Build frontend + bundle NSIS installer
         shell: bash
-        env:
-          # Git Bash keeps /usr/bin (cygwin perl) ahead of GITHUB_PATH entries,
-          # so prepend Strawberry Perl at the step level for the OpenSSL build.
-          PATH: "C:\\Strawberry\\perl\\bin;C:\\Strawberry\\c\\bin;${PATH}"
         # Keep the build identical to the official release.yml (msvc target,
         # no custom-protocol feature): local GNU (mingw) cross-builds fail on
         # Windows with ERR_CONNECTION_REFUSED because the tauri.localhost
@@ -115,6 +110,7 @@ jobs:
         # `tauri build` (not `bundle`) runs beforeBuildCommand (pnpm build),
         # which produces the frontend dist needed for packaging.
         run: |
+          export PATH="/c/Strawberry/perl/bin:/c/Strawberry/c/bin:$PATH"
           pnpm tauri build --bundles nsis --target x86_64-pc-windows-msvc --config src-tauri/tauri.webview2-offline.conf.json
 
       - name: Locate installer
