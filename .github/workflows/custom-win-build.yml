@@ -61,8 +61,15 @@ jobs:
       - name: Install Strawberry Perl (OpenSSL source build needs full Perl modules)
         shell: bash
         run: |
-          choco install strawberryperl -y --no-progress
-          echo "C:\Strawberry\perl\bin;C:\Strawberry\c\bin" >> "$GITHUB_PATH"
+          choco install strawberryperl -y --no-progress || true
+          echo "C:\Strawberry\perl\bin" >> "$GITHUB_PATH"
+          echo "C:\Strawberry\c\bin" >> "$GITHUB_PATH"
+
+      - name: Verify Perl
+        shell: bash
+        run: |
+          perl -v | head -2
+          perl -MLocale::Maketext::Simple -e 'print "Locale::Maketext::Simple OK\n"'
 
       - name: Build JDBC plugin package (release=17 + bundled Inceptor driver)
         shell: bash
