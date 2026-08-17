@@ -2903,7 +2903,7 @@ const dbCategoryDefinitions: Array<{
   {
     key: "domestic",
     titleKey: "connection.databaseCategoryDomestic",
-    optionValues: ["dm", "opengauss", "gaussdb", "kwdb", "tidb", "oceanbase", "goldendb", "tdsql", "polardb", "greatsql", "gbase", "kingbase", "highgo", "uxdb", "yashandb", "vastbase", "sundb", "oscar", "xugu"],
+    optionValues: ["dm", "opengauss", "gaussdb", "kwdb", "tidb", "oceanbase", "goldendb", "tdsql", "polardb", "greatsql", "gbase", "kingbase", "highgo", "uxdb", "yashandb", "vastbase", "sundb", "oscar", "xugu", "argodb"],
   },
   {
     key: "lightweight",
